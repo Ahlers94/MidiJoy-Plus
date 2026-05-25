@@ -1,50 +1,37 @@
-# Hardware Pinout and Mapping Guide
+# Hardware Pinout and Mapping Guide (MidiJoy-Plus)
 
-This document provides the exact hardware trace-out from the Arduino Pro Micro (ATmega32U4) to the physical Male DB9 controller ports. Because this device functions bi-directionally, the pins alter their electrical configuration dynamically based on the hardware toggle switch on **Pin 10**.
+This document outlines the exact hardware trace-out from the Arduino Pro Micro (ATmega32U4) to the physical Male DB9 controller ports. 
 
 ---
 
 ## 📌 Master Pin Mapping Table
 
-| Pro Micro Pin | ATmega32U4 Port | DB9 Port Assignment | Controller Mode Function (Input) | Synth Mode Function (Output) |
+| DB9 Pin | Port 1 (Main Bus) | Port 2 (Extended / Paddles) | Pro Micro Pin | Software Variable Name |
 | :--- | :--- | :--- | :--- | :--- |
-| **2** | PD1 | Port 1 - Pin 1 | D-Pad Up | Parallel Data Bit 0 |
-| **3** | PD0 | Port 1 - Pin 2 | D-Pad Down | Parallel Data Bit 1 |
-| **4** | PD4 | Port 1 - Pin 3 | D-Pad Left | Parallel Data Bit 2 |
-| **5** | PC6 | Port 1 - Pin 4 | D-Pad Right | Parallel Data Bit 3 |
-| **6** | PD7 | Port 1 - Pin 6 | Button B / Button A | Audio Channel Gate 0 |
-| **7** | PE6 | Port 1 & 2 - Pin 7 | Sega SELECT Multiplex Line | Vol / Pitch Latch Toggle |
-| **14** | PB3 | Port 2 - Pin 6 | Port 2 Fire Trigger | Audio Channel Gate 1 |
-| **16** | PB2 | Port 2 - Pin 4 | Port 2 D-Pad Right | Idle |
-| **8** | PB4 | Port 2 - Pin 2 | Port 2 D-Pad Down | Parallel Data Bit 4 |
-| **9** | PB5 | Port 2 - Pin 3 | Port 2 D-Pad Left / Sega Start / C | Parallel Data Bit 5 |
-| **A0 (D18)** | PF7 | Port 2 - Pin 5 | Paddle A Analog Read | Idle |
-| **A8 (D8)** | PF1 | Port 2 - Pin 2 | Paddle B Analog Read (Doubled) | Idle |
-| **10** | PB6 | Internal Switch | Mode Selector (Low = Controller, High = Synth) |
+| **1** | D-Pad Up / Data 0 | Port 2 Up | **2** (Port 1) / **7** (Port 2) | `p1_up` / `p2_up` |
+| **2** | D-Pad Down / Data 1 | Port 2 Down / Paddle B | **3** (Port 1) / **8 / A8** (Port 2) | `p1_down` / `p2_down` |
+| **3** | D-Pad Left / Data 2 | Port 2 Left | **4** (Port 1) / **9** (Port 2) | `p1_left` / `p2_left` |
+| **4** | D-Pad Right / Data 3 | Port 2 Right | **5** (Port 1) / **16** (Port 2) | `p1_right` / `p2_right` |
+| **5** | $+5\text{V}$ VCC (Optional) | Paddle A Analog Input | **VCC** (Port 1) / **A0** (Port 2) | `paddleA_pin` |
+| **6** | Button B / Audio Gate 0 | Port 2 Fire / Audio Gate 1 | **6** (Port 1) / **14** (Port 2) | `p1_fire` / `p2_fire` |
+| **7** | Sega SELECT Line | Sega SELECT Line (Linked) | **7** (Driven by Pro Micro) | `p2_up` (Doubles as Select) |
+| **8** | Common Ground (`GND`) | Common Ground (`GND`) | **GND** | *Hardware Ground* |
+| **9** | Unused / GND | Unused | *N/A* | *N/A* |
 
 ---
 
-## 🔌 Hardware Port Explanations
+## ⚠️ Critical Electrical Verification
 
-### Port 1 (Main Controller / Main Synth Bus)
-Port 1 functions as the primary hub for your standard gameplay inputs (Atari, Master System, and the primary lines of a Sega Genesis pad). When flipped to **Synth Mode**, these lines instantly become an active 4-bit data bus running parallel information alongside an audio channel gate to communicate with the Atari 8-bit computer's sound architecture.
+### 1. The Sega Select Hookup (Pin 7)
+Do **not** tie Pin 7 of the DB9 ports directly to the VCC side of your hardware toggle switch. 
+* To decode a Sega Genesis controller, **Pro Micro Pin 7** must act as an active logic output that toggles between $0\text{V}$ and $+5\text{V}$ dynamically in code. 
+* Wire DB9 Port 1 Pin 7 and DB9 Port 2 Pin 7 together, and run them straight to **Pin 7** on your Pro Micro. 
 
-### Port 2 (Extended Controller / Paddle Hub)
-Port 2 handles your advanced secondary controllers and dedicated analog inputs. 
-* **Sega 3/6-Button Extensions:** Pin 9 (`p2_left`) tracks the multiplexed shift-register updates for Sega **Button C** and the **Start Button**. 
-* **Analog Paddles:** **Pin 5** on Port 2 routes directly into the ATmega32U4's internal Analog-to-Digital Converter (**A0**) to continuously monitor the RC charging rate of Paddle A. **Paddle B** is tied to **A8** for seamless analog streaming.
+### 2. The Mode Switch (Pin 10)
+Your hardware toggle switch should be wired like this:
+* **Center Pin (Common):** Connected to **Pro Micro Pin 10**.
+* **Position 1 (Engaged):** Tied straight to **GND** (pulls Pin 10 `LOW` to activate Controller Mode).
+* **Position 2 (Released):** Left floating or tied to VCC (internal pull-up keeps Pin 10 `HIGH` to activate Synth Mode).
 
----
-
-## ⚡ Technical Electrical Notes
-
-### 1. Internal Pull-Ups
-When **Controller Mode** is engaged, all digital pins are configured as `INPUT_PULLUP`. This pulls the lines high to $+5\text{V}$. When a directional switch or arcade button on a classic gamepad is pressed, it bridges that pin directly to Ground (`GND`), pulling the line `LOW`. The firmware senses this logic inversion (`!button_state`) to register the click.
-
-### 2. The Sega Select Multiplexer
-**Pin 7 (PE6)** is a critical pin. 
-* In **Controller Mode**, it acts as an active `OUTPUT` used to aggressively toggle the internal multiplexing chips inside Sega Genesis pads to read all 6 extended buttons across multiple fast polling cycles.
-* In **Synth Mode**, it drops back to serve as the Volume/Pitch latch control line sending synchronization timing pulses back to the Atari console.
-
-### 3. Mechanical Safety Isolation
-Because the device outputs $+5\text{V}$ and $0\text{V}$ data pulses on Pins 2, 3, 4, 5, 6, and 7 during Synth playback, **never connect a gamepad to the DB9 port while a female-to-female MIDIJoy console link is attached.** The physical layout of using a single male port for both functions inherently acts as a safety interlock, preventing the user from accidentally connecting both simultaneously.
+### 3. Paddle B Dual-Routing (Pin 2 / A8)
+Because Port 2 Pin 2 acts as both a digital direction input (**Down**) for a standard joystick and an analog input for **Paddle B**, it maps to Pro Micro **Pin 8**, which natively exposes the ATmega32U4's **A8** Analog-to-Digital converter channel. The software automatically handles switching this pin's behavior contextually.
